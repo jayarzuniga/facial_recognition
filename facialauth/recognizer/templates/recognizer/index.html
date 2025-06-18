@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Facial Authentication with Webcam</title>
+  <meta charset="UTF-8">
+  <style>
+    video, canvas {
+      border: 1px solid #ccc;
+      margin-bottom: 10px;
+    }
+    h2 {
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Register Face</h2>
+  <input type="text" id="reg_name" placeholder="Your Name"><br><br>
+  <video id="webcam" autoplay playsinline width="320" height="240"></video><br>
+  <button onclick="capture('register')">Register</button>
+
+  <h2>Authenticate Face</h2>
+  <button onclick="capture('authenticate')">Authenticate</button>
+
+  <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+
+  <script>
+    // CSRF token
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+          cookie = cookie.trim();
+          if (cookie.startsWith(name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    const csrftoken = getCookie('csrftoken');
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Start webcam
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        console.error('Webcam error:', err);
+        alert('⚠️ Could not access webcam. Please check browser permissions.');
+      });
+
+    function capture(action) {
+      if (action === 'register') {
+        const name = document.getElementById('reg_name').value.trim();
+        if (!name) {
+          alert('❗ Please enter your name to register.');
+          return;
+        }
+      }
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        const formData = new FormData();
+        formData.append('image', blob, 'capture.jpg');
+        if (action === 'register') {
+          formData.append('name', document.getElementById('reg_name').value.trim());
+        }
+
+        fetch(`/${action}/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': csrftoken
+          },
+          body: formData
+        })
+        .then(async response => {
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || 'Request failed');
+
+          if (action === 'register') {
+            alert(`✅ Face successfully registered for ${data.name || 'user'}!`);
+          } else {
+            alert(`✅ Welcome back, ${data.name || 'user'}! Authentication successful.`);
+          }
+        })
+        .catch(err => {
+          console.error('Error:', err);
+          alert(`❌ ${action === 'register' ? 'Registration' : 'Authentication'} failed: ${err.message}`);
+        });
+      }, 'image/jpeg', 0.95);
+    }
+  </script>
+</body>
+</html>
